@@ -7,7 +7,7 @@ export default function App(){
   const [opening,setOpening] = useState(null)
 
   if(opening){
-    return <Trainer opening={opening}/>
+    return <Trainer opening={opening} setOpening={setOpening}/>
   }
 
   return(

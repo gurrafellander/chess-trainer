@@ -1,71 +1,107 @@
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export default function StudyMode({ opening, done }) {
   const gameRef = useRef(new Chess());
   const [fen, setFen] = useState(gameRef.current.fen());
+
   const [variationIndex, setVariationIndex] = useState(0);
   const [moveIndex, setMoveIndex] = useState(0);
 
   const moves = opening.variations[variationIndex];
 
-  function onPieceDrop(source, target, piece) {
-    console.log("Dropped piece:", piece, "from", source, "to", target);
+  // Sync board to current progress
+  useEffect(() => {
+    console.log("Syncing board → variation:", variationIndex, "move:", moveIndex);
+
     const game = gameRef.current;
 
-    const move = game.move({ from: source, to: target, promotion: "q" });
-    if (!move) {
-      console.log("Invalid move according to chess.js");
-      setFen(game.fen());
-      return false;
+    // reset game
+    while (game.history().length > 0) game.undo();
+
+    // replay moves
+    for (let i = 0; i < moveIndex; i++) {
+      game.move(moves[i]);
     }
 
-    const expectedMove = moves[moveIndex];
-    if (move.san !== expectedMove) {
-      console.log("Move not expected:", move.san, "expected:", expectedMove);
-      game.undo();
-      setFen(game.fen());
-      alert(`Wrong move! Expected: ${expectedMove}`);
-      return false;
-    }
-
-    console.log("Move accepted:", move.san);
-    setMoveIndex(moveIndex + 1);
     setFen(game.fen());
+  }, [variationIndex, moveIndex]);
 
-    if (moveIndex + 1 === moves.length) {
-      if (variationIndex < opening.variations.length - 1) {
-        console.log("Next variation");
-        setVariationIndex(variationIndex + 1);
-        setMoveIndex(0);
-        const g = gameRef.current;
-        while (g.history().length > 0) g.undo();
-        setFen(g.fen());
-      } else {
-        console.log("All variations done");
-        done();
+  function onPieceDrop(args) {
+    const { sourceSquare, targetSquare } = args;
+
+    console.log("Drop:", sourceSquare, "→", targetSquare);
+
+    const game = gameRef.current;
+
+    try {
+      const move = game.move({
+        from: sourceSquare,
+        to: targetSquare,
+        promotion: "q",
+      });
+
+      if (!move) {
+        console.log("Illegal move");
+        setFen(game.fen());
+        return false;
       }
-    }
 
-    return true;
+      const expectedMove = moves[moveIndex];
+
+      if (move.san !== expectedMove) {
+        console.log("Wrong move:", move.san, "expected:", expectedMove);
+        game.undo();
+        setFen(game.fen());
+        return false;
+      }
+
+      console.log("Correct move:", move.san);
+
+      setMoveIndex(moveIndex + 1);
+      setFen(game.fen());
+
+      // next variation
+      if (moveIndex + 1 === moves.length) {
+        if (variationIndex < opening.variations.length - 1) {
+          console.log("Next variation");
+
+          setVariationIndex(variationIndex + 1);
+          setMoveIndex(0);
+
+          while (game.history().length > 0) game.undo();
+          setFen(game.fen());
+        } else {
+          console.log("All done → recall mode");
+          done();
+        }
+      }
+
+      return true;
+    } catch (e) {
+      console.error("Move error:", e);
+      return false;
+    }
   }
 
   return (
     <div>
       <h2>Study Mode</h2>
-      {moveIndex < moves.length && <p>Next move: {moves[moveIndex]}</p>}
+
+      {moveIndex < moves.length && (
+        <p>Next move: {moves[moveIndex]}</p>
+      )}
+
       <Chessboard
-        id="study-chessboard"
-        position={fen}
-        onPieceDrop={onPieceDrop} // <-- correct for v5
+        options={{
+          position: fen,
+          onPieceDrop,
+        }}
       />
-      <p>
-        Variation {variationIndex + 1} of {opening.variations.length}
-      </p>
-      <p>
-        Move {moveIndex + 1} of {moves.length}
-      </p>
+
+      <p>Variation {variationIndex + 1} / {opening.variations.length}</p>
+      <p>Move {moveIndex + 1} / {moves.length}</p>
     </div>
   );
 }
