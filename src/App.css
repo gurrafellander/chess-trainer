@@ -182,3 +182,52 @@
     border-right-color: var(--border);
   }
 }
+
+.openings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.opening-card {
+  background: #1e1e1e;
+  border-radius: 16px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.opening-card:hover {
+  transform: translateY(-4px);
+  border-color: #444;
+  background: #252525;
+}
+
+.card-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.opening-card h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.opening-card p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #aaa;
+}
+
+.arrow {
+  font-size: 20px;
+  color: #888;
+  transition: transform 0.2s ease;
+}
+
+.opening-card:hover .arrow {
+  transform: translateX(4px);
+  color: #fff;
+}

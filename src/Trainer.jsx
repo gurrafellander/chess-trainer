@@ -8,8 +8,8 @@ export default function Trainer({opening, setOpening}){
   const [mode,setMode] = useState("study")
 
   if(mode === "study"){
-    return <StudyMode opening={opening} done={()=>setMode("recall")} />
+    return <StudyMode opening={opening} setOpening={setOpening} done={()=>setMode("recall")} />
   }
 
-  return <RecallMode opening={opening} onExit={()=>setOpening(null)}/>
+  return <RecallMode opening={opening} setOpening={setOpening} onExit={()=>setOpening(null)}/>
 }
