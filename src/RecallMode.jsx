@@ -340,6 +340,10 @@ const styles = `
     width: 520px;
     max-width: calc(100vw - 48px);
     box-shadow: 0 40px 100px rgba(0,0,0,0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
   }
 
   .overlay-eyebrow {
@@ -485,9 +489,9 @@ export default function RecallMode({ opening, onExit, onRestart }) {
   const [fen, setFen] = useState(gameRef.current.fen());
   const [variationIndex, setVariationIndex] = useState(0);
   const [moveIndex, setMoveIndex] = useState(0);
-  const [isComplete, setIsComplete] = useState(false);
+  const [overlayState, setOverlayState] = useState("none"); // 'none' | 'variation' | 'complete'
   const [feedback, setFeedback] = useState(null); // 'correct' | 'wrong' | null
-  const [missedMoves, setMissedMoves] = useState([]); // indices of wrong guesses this variation
+  const [missedMoves, setMissedMoves] = useState([]);
 
   const [stats, setStats] = useState(
     opening.variations.map(() => ({ correct: 0, incorrect: 0 }))
@@ -497,19 +501,30 @@ export default function RecallMode({ opening, onExit, onRestart }) {
   const moves = currentVariation.moves;
   const openingColor = opening.name.includes("Defense") ? "black" : "white";
 
+  function triggerOverlay(nextMoveIndex) {
+    if (nextMoveIndex === moves.length) {
+      if (variationIndex < opening.variations.length - 1) {
+        setOverlayState("variation");
+      } else {
+        setOverlayState("complete");
+      }
+    }
+  }
+
   // Auto-play opponent moves
   useEffect(() => {
     const game = gameRef.current;
     if (moveIndex >= moves.length) return;
     const isWhiteToMove = game.turn() === "w";
     const isOpeningWhite = openingColor === "white";
-    // If it's the opponent's turn, play automatically
     if ((isWhiteToMove && !isOpeningWhite) || (!isWhiteToMove && isOpeningWhite)) {
       const timer = setTimeout(() => {
         const move = game.move(moves[moveIndex], { sloppy: true });
         if (move) {
           setFen(game.fen());
-          setMoveIndex(prev => prev + 1);
+          const nextMoveIndex = moveIndex + 1;
+          setMoveIndex(nextMoveIndex);
+          triggerOverlay(nextMoveIndex);
         }
       }, 300);
       return () => clearTimeout(timer);
@@ -529,17 +544,14 @@ export default function RecallMode({ opening, onExit, onRestart }) {
     });
   }
 
-  function advanceVariation() {
+  function advanceToNextVariation() {
     const game = gameRef.current;
-    if (variationIndex < opening.variations.length - 1) {
-      setVariationIndex(v => v + 1);
-      setMoveIndex(0);
-      setMissedMoves([]);
-      while (game.history().length > 0) game.undo();
-      setFen(game.fen());
-    } else {
-      setIsComplete(true);
-    }
+    while (game.history().length > 0) game.undo();
+    setFen(game.fen());
+    setMoveIndex(0);
+    setMissedMoves([]);
+    setOverlayState("none");
+    setVariationIndex(v => v + 1);
   }
 
   function resetGame() {
@@ -548,13 +560,14 @@ export default function RecallMode({ opening, onExit, onRestart }) {
     setFen(game.fen());
     setVariationIndex(0);
     setMoveIndex(0);
-    setIsComplete(false);
+    setOverlayState("none");
     setMissedMoves([]);
     setStats(opening.variations.map(() => ({ correct: 0, incorrect: 0 })));
     if (onRestart) onRestart();
   }
 
   function onPieceDrop({ sourceSquare, targetSquare }) {
+    if (overlayState !== "none") return false;
     const game = gameRef.current;
     try {
       const move = game.move({ from: sourceSquare, to: targetSquare, promotion: "q" });
@@ -575,8 +588,7 @@ export default function RecallMode({ opening, onExit, onRestart }) {
       const nextIndex = moveIndex + 1;
       setMoveIndex(nextIndex);
       setFen(game.fen());
-
-      if (nextIndex === moves.length) advanceVariation();
+      triggerOverlay(nextIndex);
       return true;
     } catch (e) {
       return false;
@@ -708,8 +720,25 @@ export default function RecallMode({ opening, onExit, onRestart }) {
 
         </div>
 
-        {/* Completion overlay */}
-        {isComplete && (
+        {/* Variation complete overlay */}
+        {overlayState === "variation" && (
+          <div className="overlay">
+            <div className="overlay-card">
+              <div className="overlay-eyebrow">Variation complete</div>
+              <div className="overlay-title">Keep going.</div>
+              <div className="overlay-sub">
+                Up next: <strong>{opening.variations[variationIndex + 1]?.variation?.split(",")?.[0] || `Variation ${variationIndex + 2}`}</strong>
+              </div>
+              <div className="overlay-actions">
+                <button className="btn-primary" onClick={advanceToNextVariation}>Next variation →</button>
+                <button className="btn-secondary" onClick={onExit}>Exit</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* All complete overlay */}
+        {overlayState === "complete" && (
           <div className="overlay">
             <div className="overlay-card">
               <div className="overlay-eyebrow">Session complete</div>
