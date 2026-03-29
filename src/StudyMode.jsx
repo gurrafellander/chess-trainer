@@ -290,7 +290,63 @@ const styles = `
     gap: 18px;
   }
 
-  /* ── Overlays ── */
+  /* ── Arrow toggle ── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toggle-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .toggle {
+    position: relative;
+    width: 38px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+
+  .toggle input:checked + .toggle-track {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+  }
+
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    top: 3px;
+    left: 3px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+  }
+
+  .toggle input:checked + .toggle-track::after {
+    transform: translateX(16px);
+    background: var(--accent);
+  }
   .overlay {
     position: fixed;
     inset: 0;
@@ -394,10 +450,19 @@ export default function StudyMode({ opening, setOpening, done }) {
   const [justMoved, setJustMoved] = useState(false);
   // 'none' | 'variation' | 'complete'
   const [overlayState, setOverlayState] = useState("none");
+  const [showArrows, setShowArrows] = useState(false);
 
   const currentVariation = opening.variations[variationIndex];
   const moves = currentVariation.moves;
   const openingColor = opening.name.includes("Defense") ? "black" : "white";
+
+  function resolveMove(san) {
+    const legal = gameRef.current.moves({ verbose: true });
+    return legal.find(m => m.san === san) || null;
+  }
+
+  const nextMoveSan = moveIndex < moves.length ? moves[moveIndex] : null;
+  const resolvedArrow = showArrows && nextMoveSan ? resolveMove(nextMoveSan) : null;
 
   // Sync board whenever variation or moveIndex changes
   useEffect(() => {
@@ -420,22 +485,9 @@ export default function StudyMode({ opening, setOpening, done }) {
       const move = game.move(autoMove, { sloppy: true });
       if (move) {
         setFen(game.fen());
-
-        const nextMoveIndex = moveIndex + 1;
-        setMoveIndex(nextMoveIndex);
-      
-        setJustMoved(false);
-        if (nextMoveIndex === moves.length) {
-          console.log("variation done");
-          console.log(variationIndex, opening.variations.length - 1)
-          // Variation complete — show overlay instead of immediately resetting
-          if (variationIndex < opening.variations.length - 1) {
-            setOverlayState("variation");
-          } else {
-            setOverlayState("complete");
-          }
-        }
+        setMoveIndex((prev) => prev + 1);
       }
+      setJustMoved(false);
     }
   }, [moveIndex, justMoved]);
 
@@ -467,8 +519,6 @@ export default function StudyMode({ opening, setOpening, done }) {
       setJustMoved(true);
 
       if (nextMoveIndex === moves.length) {
-        console.log("variation done");
-        console.log(variationIndex, opening.variations.length - 1)
         // Variation complete — show overlay instead of immediately resetting
         if (variationIndex < opening.variations.length - 1) {
           setOverlayState("variation");
@@ -553,6 +603,17 @@ export default function StudyMode({ opening, setOpening, done }) {
               ) : (
                 <div className="hint-done">Variation complete ✓</div>
               )}
+              <div className="toggle-row" style={{ marginTop: "10px" }}>
+                <span className="toggle-label">Show arrow</span>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={showArrows}
+                    onChange={e => setShowArrows(e.target.checked)}
+                  />
+                  <span className="toggle-track" />
+                </label>
+              </div>
             </div>
 
             <div>
@@ -583,6 +644,13 @@ export default function StudyMode({ opening, setOpening, done }) {
                     position: fen,
                     boardOrientation: openingColor,
                     onPieceDrop,
+                    ...(resolvedArrow ? {
+                      arrows: [{
+                        startSquare: resolvedArrow.from,
+                        endSquare: resolvedArrow.to,
+                        color: "rgba(201,168,76,0.85)"
+                      }]
+                    } : {}),
                   }}
                 />
               </div>
