@@ -485,9 +485,19 @@ export default function StudyMode({ opening, setOpening, done }) {
       const move = game.move(autoMove, { sloppy: true });
       if (move) {
         setFen(game.fen());
-        setMoveIndex((prev) => prev + 1);
+        const nextMoveIndex = moveIndex + 1;
+        setMoveIndex(nextMoveIndex);
+        setJustMoved(false);
+        if (nextMoveIndex === moves.length) {
+          if (variationIndex < opening.variations.length - 1) {
+            setOverlayState("variation");
+          } else {
+            setOverlayState("complete");
+          }
+        }
+      } else {
+        setJustMoved(false);
       }
-      setJustMoved(false);
     }
   }, [moveIndex, justMoved]);
 
@@ -516,15 +526,17 @@ export default function StudyMode({ opening, setOpening, done }) {
       const nextMoveIndex = moveIndex + 1;
       setMoveIndex(nextMoveIndex);
       setFen(game.fen());
-      setJustMoved(true);
 
       if (nextMoveIndex === moves.length) {
-        // Variation complete — show overlay instead of immediately resetting
+        // Player made the last move — show overlay, no opponent move needed
         if (variationIndex < opening.variations.length - 1) {
           setOverlayState("variation");
         } else {
           setOverlayState("complete");
         }
+      } else {
+        // More moves remain — let opponent auto-play if it's their turn
+        setJustMoved(true);
       }
 
       return true;
