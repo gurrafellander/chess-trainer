@@ -250,12 +250,20 @@ const styles = `
     color: var(--wrong);
   }
 
-  /* Move list */
+  /* Move list — blurred upcoming moves */
   .move-list {
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
     margin-top: 4px;
+    position: relative;
+  }
+
+  .move-list-blur {
+    filter: blur(5px);
+    user-select: none;
+    pointer-events: none;
+    transition: filter 0.3s ease;
   }
 
   .move-chip {
@@ -270,6 +278,58 @@ const styles = `
   .move-chip.current { color: var(--accent); background: rgba(201,168,76,0.1); border-color: rgba(201,168,76,0.3); }
   .move-chip.upcoming { color: var(--text-dim); }
   .move-chip.missed { color: var(--wrong); background: var(--wrong-bg); border-color: var(--wrong-border); }
+
+  /* Hint button */
+  .hint-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .hint-btn {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 11px 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .hint-btn:hover {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .hint-btn.active {
+    border-color: rgba(201,168,76,0.4);
+    color: var(--accent);
+    background: rgba(201,168,76,0.07);
+  }
+
+  .hint-btn.show-move {
+    border-color: rgba(201,76,76,0.3);
+    color: var(--wrong);
+    background: rgba(201,76,76,0.06);
+  }
+
+  .hint-btn.show-move:hover {
+    border-color: rgba(201,76,76,0.5);
+    color: var(--wrong);
+  }
+
+  .hint-penalty {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+  }
 
   /* ── Board area ── */
   .recall-main {
@@ -501,6 +561,19 @@ export default function RecallMode({ opening, onExit, onRestart }) {
   const moves = currentVariation.moves;
   const openingColor = opening.name.includes("Defense") ? "black" : "white";
 
+  // hint: null → 'piece' (highlight from-square) → 'move' (show arrow)
+  const [hintLevel, setHintLevel] = useState(null);
+
+  // Resolve the current expected SAN move into { from, to } squares
+  function resolveMove(san) {
+    const game = gameRef.current;
+    const legal = game.moves({ verbose: true });
+    return legal.find(m => m.san === san) || null;
+  }
+
+  const expectedSan = moveIndex < moves.length ? moves[moveIndex] : null;
+  const resolvedHint = expectedSan ? resolveMove(expectedSan) : null;
+
   function triggerOverlay(nextMoveIndex) {
     if (nextMoveIndex === moves.length) {
       if (variationIndex < opening.variations.length - 1) {
@@ -551,6 +624,7 @@ export default function RecallMode({ opening, onExit, onRestart }) {
     setMoveIndex(0);
     setMissedMoves([]);
     setOverlayState("none");
+    setHintLevel(null);
     setVariationIndex(v => v + 1);
   }
 
@@ -588,6 +662,7 @@ export default function RecallMode({ opening, onExit, onRestart }) {
       const nextIndex = moveIndex + 1;
       setMoveIndex(nextIndex);
       setFen(game.fen());
+      setHintLevel(null);
       triggerOverlay(nextIndex);
       return true;
     } catch (e) {
@@ -680,20 +755,59 @@ export default function RecallMode({ opening, onExit, onRestart }) {
               {feedback === "correct" ? "✓ Correct" : feedback === "wrong" ? "✗ Wrong move" : "‎"}
             </div>
 
-            {/* Move list */}
+            {/* Hint buttons */}
+            {overlayState === "none" && moveIndex < moves.length && (
+              <div className="hint-block">
+                <button
+                  className={`hint-btn ${hintLevel === "piece" ? "active" : ""} ${hintLevel === "move" ? "show-move" : ""}`}
+                  onClick={() => {
+                    if (hintLevel === null) {
+                      // First press: highlight piece, count as incorrect
+                      updateStats("incorrect");
+                      setMissedMoves(prev => [...prev, moveIndex]);
+                      setHintLevel("piece");
+                    } else if (hintLevel === "piece") {
+                      // Second press: show full arrow
+                      setHintLevel("move");
+                    }
+                  }}
+                >
+                  {hintLevel === null && "💡 Hint — show piece"}
+                  {hintLevel === "piece" && "👁 Show move"}
+                  {hintLevel === "move" && "Arrow shown on board"}
+                </button>
+                {hintLevel !== null && (
+                  <div className="hint-penalty">Counted as incorrect</div>
+                )}
+              </div>
+            )}
+
+            {/* Move list — upcoming moves blurred */}
             <div>
               <div className="sidebar-section-label">Move sequence</div>
               <div className="move-list">
-                {moves.map((m, i) => {
-                  const cls = i < moveIndex
-                    ? (missedMoves.includes(i) ? "missed" : "done")
-                    : i === moveIndex ? "current" : "upcoming";
-                  return (
-                    <span key={i} className={`move-chip ${cls}`}>
-                      {i % 2 === 0 ? `${Math.floor(i / 2) + 1}.` : ""}{m}
-                    </span>
-                  );
-                })}
+                {/* Done moves — visible */}
+                {moves.slice(0, moveIndex).map((m, i) => (
+                  <span key={i} className={`move-chip ${missedMoves.includes(i) ? "missed" : "done"}`}>
+                    {i % 2 === 0 ? `${Math.floor(i / 2) + 1}.` : ""}{m}
+                  </span>
+                ))}
+                {/* Upcoming moves — blurred unless hint is active */}
+                <span className={`move-list-blur`} style={{ display: "contents" }}>
+                  {moves.slice(moveIndex).map((m, i) => {
+                    const absIdx = moveIndex + i;
+                    const isCurrent = absIdx === moveIndex;
+                    return (
+                      <span
+                        key={absIdx}
+                        className={`move-chip ${isCurrent ? "current" : "upcoming"}`}
+                        style={{ filter: "blur(4px)", userSelect: "none" }}
+                      >
+                        {absIdx % 2 === 0 ? `${Math.floor(absIdx / 2) + 1}.` : ""}{m}
+                      </span>
+                    );
+                  })}
+                </span>
               </div>
             </div>
 
@@ -712,6 +826,18 @@ export default function RecallMode({ opening, onExit, onRestart }) {
                     position: fen,
                     boardOrientation: openingColor,
                     onPieceDrop,
+                    ...(hintLevel === "move" && resolvedHint ? {
+                      arrows: [{
+                        startSquare: resolvedHint.from,
+                        endSquare: resolvedHint.to,
+                        color: "rgba(201,168,76,0.85)"
+                      }]
+                    } : {}),
+                    ...(hintLevel === "piece" && resolvedHint ? {
+                      squareStyles: {
+                        [resolvedHint.from]: { backgroundColor: "rgba(201,168,76,0.45)" }
+                      }
+                    } : {}),
                   }}
                 />
               </div>

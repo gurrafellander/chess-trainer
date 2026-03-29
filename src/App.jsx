@@ -296,6 +296,119 @@ const styles = `
     border-radius: 2px;
   }
 
+  /* ── Mode picker overlay ── */
+  .mode-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,8,6,0.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    backdrop-filter: blur(6px);
+  }
+
+  .mode-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    width: 480px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 40px 100px rgba(0,0,0,0.7);
+    position: relative;
+  }
+
+  .mode-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: color 0.15s;
+  }
+  .mode-close:hover { color: var(--text-secondary); }
+
+  .mode-eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .mode-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+
+  .mode-sub {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 28px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .mode-option {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 14px;
+    row-gap: 2px;
+    text-align: left;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: border-color 0.18s, background 0.18s, transform 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .mode-option:hover {
+    border-color: var(--accent-dim);
+    background: #2f2a23;
+    transform: translateX(3px);
+  }
+
+  .mode-option-icon {
+    grid-row: 1 / 3;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mode-option-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    align-self: end;
+  }
+
+  .mode-option-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    align-self: start;
+    line-height: 1.4;
+  }
+
   /* Empty state */
   .empty-state {
     padding: 80px;
@@ -311,10 +424,12 @@ const MAX_VARIATIONS = Math.max(...openings.map(o => o.variations.length));
 
 export default function App() {
   const [opening, setOpening] = useState(null);
+  const [pendingOpening, setPendingOpening] = useState(null); // opening awaiting mode selection
+  const [mode, setMode] = useState(null);
   const [search, setSearch] = useState("");
 
-  if (opening) {
-    return <Trainer opening={opening} setOpening={setOpening} />;
+  if (opening && mode) {
+    return <Trainer opening={opening} mode={mode} setOpening={() => { setOpening(null); setMode(null); }} />;
   }
 
   const filtered = openings.filter(o =>
@@ -376,7 +491,7 @@ export default function App() {
                   <div
                     key={o.name}
                     className="opening-card"
-                    onClick={() => setOpening(o)}
+                    onClick={() => setPendingOpening(o)}
                   >
                     <div className="card-top">
                       <span className="card-name">{o.name}</span>
@@ -397,6 +512,35 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Mode picker overlay */}
+        {pendingOpening && (
+          <div className="mode-overlay" onClick={() => setPendingOpening(null)}>
+            <div className="mode-card" onClick={e => e.stopPropagation()}>
+              <button className="mode-close" onClick={() => setPendingOpening(null)}>✕</button>
+              <div className="mode-eyebrow">Choose mode</div>
+              <div className="mode-title">{pendingOpening.name}</div>
+              <div className="mode-sub">{pendingOpening.variations.length} variations</div>
+              <div className="mode-options">
+                <button className="mode-option" onClick={() => { setOpening(pendingOpening); setMode("study"); setPendingOpening(null); }}>
+                  <div className="mode-option-icon">📖</div>
+                  <div className="mode-option-label">Study</div>
+                  <div className="mode-option-desc">Learn variations move by move with guidance</div>
+                </button>
+                <button className="mode-option" onClick={() => { setOpening(pendingOpening); setMode("recall"); setPendingOpening(null); }}>
+                  <div className="mode-option-icon">🧠</div>
+                  <div className="mode-option-label">Recall</div>
+                  <div className="mode-option-desc">Test yourself through all variations in order</div>
+                </button>
+                <button className="mode-option" onClick={() => { setOpening(pendingOpening); setMode("practice"); setPendingOpening(null); }}>
+                  <div className="mode-option-icon">⚡</div>
+                  <div className="mode-option-label">Practice</div>
+                  <div className="mode-option-desc">Spaced repetition — dropped in at a random move</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </>
