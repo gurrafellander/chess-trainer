@@ -508,11 +508,9 @@ export default function PracticeMode({ opening, onExit }) {
         const move = game.move(moves[moveIndex], { sloppy: true });
         if (move) {
           setFen(game.fen());
-          setMoveIndex(prev => {
-            const next = prev + 1;
-            if (next === moves.length) finishRound(true);
-            return next;
-          });
+          const nextMoveIndex = moveIndex + 1;
+          setMoveIndex(nextMoveIndex);
+          if (nextMoveIndex === moves.length) finishRound(true);
         }
       }, 300);
       return () => clearTimeout(timer);
