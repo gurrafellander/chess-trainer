@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chess Opening Trainer</title>
+    <meta name="description" content="Master chess openings one variation at a time. Study lines linearly and build pattern recognition through deliberate repetition." />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html, body {
+        height: 100%;
+        background: #1a1612;
+        color: #f0e8d8;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      #root {
+        min-height: 100vh;
+      }
+
+      /* Loading screen shown before React mounts */
+      #loading {
+        position: fixed;
+        inset: 0;
+        background: #1a1612;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        z-index: 9999;
+        transition: opacity 0.4s ease;
+      }
+
+      #loading.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .loading-glyph {
+        font-size: 40px;
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+
+      .loading-label {
+        font-family: 'DM Mono', 'Courier New', monospace;
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #5a4e42;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; transform: scale(0.95); }
+        50%       { opacity: 1;   transform: scale(1.05); }
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-rE_scUJr.js"></script>
+  </head>
+  <body>
+    <div id="loading">
+      <div class="loading-glyph">♟</div>
+      <div class="loading-label">Loading openings…</div>
+    </div>
+    <div id="root"></div>
+    <script>
+      // Hide the loading screen once React has rendered
+      document.addEventListener('DOMContentLoaded', () => {
+        const loading = document.getElementById('loading');
+        const observer = new MutationObserver(() => {
+          if (document.getElementById('root').childElementCount > 0) {
+            loading.classList.add('hidden');
+            setTimeout(() => loading.remove(), 450);
+            observer.disconnect();
+          }
+        });
+        observer.observe(document.getElementById('root'), { childList: true });
+      });
+    </script>
+  </body>
+</html>
