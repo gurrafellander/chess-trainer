@@ -174,13 +174,52 @@ def dedup_player_moves(
     return list(by_fp.values()), removed
 
 
-# ── Step 8: Select best variations per family ─────────────────────────────────
+# ── Step 8: Select and sort variations per family ────────────────────────────
+
+# Keywords that indicate a main/classical line — these sort to the top of their group
+PRIORITY_KEYWORDS = {"main line", "classical", "main variation", "normal variation"}
+
+
+def variation_group(variation_name: str) -> str:
+    """
+    Extract the primary sub-variation name (before the first comma).
+    e.g. 'Hunt Variation, Mikenas Gambit' → 'Hunt Variation'
+         'Four Pawns Attack'               → 'Four Pawns Attack'
+         ''                                → '' (opening main line, sorts first)
+    """
+    if not variation_name:
+        return ""
+    return variation_name.split(",")[0].strip()
+
+
+def is_priority(variation_name: str) -> bool:
+    """True if the variation name contains a main/classical line keyword."""
+    lower = variation_name.lower()
+    return any(kw in lower for kw in PRIORITY_KEYWORDS)
 
 
 def select_variations(
     variations: list[dict], max_n: int = MAX_VARIATIONS
 ) -> list[dict]:
-    return sorted(variations, key=lambda v: v["move_count"], reverse=True)[:max_n]
+    """
+    1. Take the top max_n deepest variations (by move count).
+    2. Re-sort the selected set so that:
+       - Sub-variation groups are clustered together (alphabetically by group name,
+         with the opening's main line '' group always first)
+       - Within each group: priority entries (Main Line, Classical) first,
+         then by move count descending
+    """
+    # First pass: pick the deepest max_n lines
+    candidates = sorted(variations, key=lambda v: v["move_count"], reverse=True)[:max_n]
+
+    def sort_key(v):
+        group = variation_group(v["variation"])
+        priority = 0 if is_priority(v["variation"]) else 1
+        # Empty group (opening's own main line) always sorts before named groups
+        group_order = ("", group) if group == "" else ("z", group)
+        return (group_order, priority, -v["move_count"])
+
+    return sorted(candidates, key=sort_key)
 
 
 # ── Step 9: Build the output structure ───────────────────────────────────────
