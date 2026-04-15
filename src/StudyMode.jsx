@@ -445,6 +445,8 @@ const styles = `
 export default function StudyMode({ opening, setOpening, done }) {
   const gameRef = useRef(new Chess());
   const [fen, setFen] = useState(gameRef.current.fen());
+  const [moveFrom, setMoveFrom] = useState('');
+  const [optionSquares, setOptionSquares] = useState({});
   const [variationIndex, setVariationIndex] = useState(0);
   const [moveIndex, setMoveIndex] = useState(0);
   const [justMoved, setJustMoved] = useState(false);
@@ -544,7 +546,82 @@ export default function StudyMode({ opening, setOpening, done }) {
       return false;
     }
   }
+  // get the move options for a square to show valid moves
+  function getMoveOptions(square) {
+    const game = gameRef.current;
 
+    const moves = game.moves({
+      square,
+      verbose: true
+    });
+
+    if (moves.length === 0) {
+      setOptionSquares({});
+      return false;
+    }
+
+    const newSquares = {};
+
+    for (const move of moves) {
+      newSquares[move.to] = {
+        background:
+          game.get(move.to) &&
+          game.get(move.to)?.color !== game.get(square)?.color
+            ? 'radial-gradient(circle, rgba(0,0,0,.1) 85%, transparent 85%)'
+            : 'radial-gradient(circle, rgba(0,0,0,.1) 25%, transparent 25%)',
+        borderRadius: '50%'
+      };
+    }
+
+    newSquares[square] = {
+      background: 'rgba(255, 255, 0, 0.4)'
+    };
+
+    setOptionSquares(newSquares);
+    return true;
+  }
+  function onSquareClick({square, piece}) {
+    if (overlayState !== "none") return;
+  
+    // 1. No piece selected yet → select one
+    if (!moveFrom) {
+      if (!piece) return;
+  
+      const hasMoves = getMoveOptions(square);
+      if (hasMoves) {
+        setMoveFrom(square);
+      }
+      return;
+    }
+  
+    // 2. Same square clicked → deselect
+    if (square === moveFrom) {
+      setMoveFrom('');
+      setOptionSquares({});
+      return;
+    }
+  
+    // 3. Try to make move via onPieceDrop (SOURCE OF TRUTH)
+    const success = onPieceDrop({
+      sourceSquare: moveFrom,
+      targetSquare: square
+    });
+  
+    if (success) {
+      setMoveFrom('');
+      setOptionSquares({});
+      return;
+    }
+  
+    // 4. If move failed → maybe selecting a new piece
+    if (piece) {
+      const hasMoves = getMoveOptions(square);
+      setMoveFrom(hasMoves ? square : '');
+    } else {
+      setMoveFrom('');
+      setOptionSquares({});
+    }
+  }
   const varPct = (variationIndex / opening.variations.length) * 100;
   const movePct = (moveIndex / moves.length) * 100;
 
@@ -656,6 +733,8 @@ export default function StudyMode({ opening, setOpening, done }) {
                     position: fen,
                     boardOrientation: openingColor,
                     onPieceDrop,
+                    onSquareClick,
+                    squareStyles: optionSquares,
                     ...(resolvedArrow ? {
                       arrows: [{
                         startSquare: resolvedArrow.from,

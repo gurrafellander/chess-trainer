@@ -408,8 +408,8 @@ const styles = `
 // ── Spaced repetition weight helpers ─────────────────────────────────────────
 
 const INITIAL_WEIGHT = 10;
-const CORRECT_DECAY  = 0.55;  // multiply weight by this on correct answer
-const WRONG_BOOST    = 1.8;   // multiply weight by this on wrong answer
+const CORRECT_DECAY  = 0.55;
+const WRONG_BOOST    = 1.8;
 const MIN_WEIGHT     = 1;
 const MAX_WEIGHT     = 30;
 
@@ -425,7 +425,6 @@ function updateWeight(weights, index, correct) {
   });
 }
 
-/** Weighted random pick — variations with higher weight appear more often */
 function pickWeightedIndex(weights) {
   const total = weights.reduce((s, w) => s + w, 0);
   let r = Math.random() * total;
@@ -436,13 +435,9 @@ function pickWeightedIndex(weights) {
   return weights.length - 1;
 }
 
-/** Pick a random drop-in move number (0, 2, or 4 — i.e. after white's 1st, 2nd, or 3rd move) */
 function pickDropIn(moves, openingColor) {
-  // For the player's color perspective: drop in at ply 0, 2, or 4
-  // but never beyond halfway through the variation
   const maxDropIn = Math.min(4, Math.floor(moves.length / 2) * 2 - 2);
   const options = [0, 2, 4].filter(p => p <= Math.max(0, maxDropIn));
-  // adjust for black: player moves on odd plies, so drop-in should land on odd ply
   if (openingColor === "black") {
     const blackOptions = [1, 3, 5].filter(p => p <= Math.max(1, maxDropIn + 1) && p < moves.length);
     if (blackOptions.length === 0) return 1;
@@ -462,6 +457,8 @@ export default function PracticeMode({ opening, onExit }) {
   const [dropInAt, setDropInAt] = useState(0);
   const [moveIndex, setMoveIndex] = useState(0);
   const [fen, setFen] = useState(gameRef.current.fen());
+  const [moveFrom, setMoveFrom] = useState('');
+  const [optionSquares, setOptionSquares] = useState({});
   const [feedback, setFeedback] = useState(null);
   const [sessionCorrect, setSessionCorrect] = useState(0);
   const [sessionWrong, setSessionWrong] = useState(0);
@@ -471,7 +468,6 @@ export default function PracticeMode({ opening, onExit }) {
   const currentVariation = opening.variations[variationIndex];
   const moves = currentVariation.moves;
 
-  // Set up board for current variation + drop-in point
   const setupRound = useCallback((varIdx, newWeights) => {
     const game = gameRef.current;
     while (game.history().length > 0) game.undo();
@@ -479,7 +475,6 @@ export default function PracticeMode({ opening, onExit }) {
     const variation = opening.variations[varIdx];
     const dropIn = pickDropIn(variation.moves, openingColor);
 
-    // Play up to the drop-in point
     for (let i = 0; i < dropIn; i++) {
       game.move(variation.moves[i]);
     }
@@ -498,24 +493,28 @@ export default function PracticeMode({ opening, onExit }) {
   }, []);
 
   // Auto-play opponent moves
+  // FIX: read moves fresh from opening.variations[variationIndex] inside the
+  // effect to avoid stale closures when variationIndex and moveIndex update
+  // in the same render cycle.
   useEffect(() => {
     const game = gameRef.current;
-    if (moveIndex >= moves.length) return;
+    const currentMoves = opening.variations[variationIndex].moves;
+    if (moveIndex >= currentMoves.length) return;
     const isWhiteToMove = game.turn() === "w";
     const isOpeningWhite = openingColor === "white";
     if ((isWhiteToMove && !isOpeningWhite) || (!isWhiteToMove && isOpeningWhite)) {
       const timer = setTimeout(() => {
-        const move = game.move(moves[moveIndex], { sloppy: true });
+        const move = game.move(currentMoves[moveIndex], { sloppy: true });
         if (move) {
           setFen(game.fen());
           const nextMoveIndex = moveIndex + 1;
           setMoveIndex(nextMoveIndex);
-          if (nextMoveIndex === moves.length) finishRound(true);
+          if (nextMoveIndex === currentMoves.length) finishRound(true);
         }
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [moveIndex, moves, openingColor]);
+  }, [moveIndex, variationIndex, openingColor]);
 
   function showFeedback(type) {
     setFeedback(type);
@@ -534,6 +533,79 @@ export default function PracticeMode({ opening, onExit }) {
     }, 600);
   }
 
+  function getMoveOptions(square) {
+    const game = gameRef.current;
+
+    const moves = game.moves({
+      square,
+      verbose: true
+    });
+
+    if (moves.length === 0) {
+      setOptionSquares({});
+      return false;
+    }
+
+    const newSquares = {};
+
+    for (const move of moves) {
+      newSquares[move.to] = {
+        background:
+          game.get(move.to) &&
+          game.get(move.to)?.color !== game.get(square)?.color
+            ? 'radial-gradient(circle, rgba(0,0,0,.1) 85%, transparent 85%)'
+            : 'radial-gradient(circle, rgba(0,0,0,.1) 25%, transparent 25%)',
+        borderRadius: '50%'
+      };
+    }
+
+    newSquares[square] = {
+      background: 'rgba(255, 255, 0, 0.4)'
+    };
+
+    setOptionSquares(newSquares);
+    return true;
+  }
+
+  function onSquareClick({ square, piece }) {
+    // FIX: was `overlayState !== "none"` which is undefined in this component;
+    // the correct guard is the showSummary boolean.
+    if (showSummary) return;
+
+    // 1. No piece selected yet → select one
+    if (!moveFrom) {
+      if (!piece) return;
+      const hasMoves = getMoveOptions(square);
+      if (hasMoves) setMoveFrom(square);
+      return;
+    }
+
+    // 2. Same square clicked → deselect
+    if (square === moveFrom) {
+      setMoveFrom('');
+      setOptionSquares({});
+      return;
+    }
+
+    // 3. Try to make move via onPieceDrop (source of truth)
+    const success = onPieceDrop({ sourceSquare: moveFrom, targetSquare: square });
+
+    if (success) {
+      setMoveFrom('');
+      setOptionSquares({});
+      return;
+    }
+
+    // 4. Move failed → maybe selecting a new piece
+    if (piece) {
+      const hasMoves = getMoveOptions(square);
+      setMoveFrom(hasMoves ? square : '');
+    } else {
+      setMoveFrom('');
+      setOptionSquares({});
+    }
+  }
+
   function onPieceDrop({ sourceSquare, targetSquare }) {
     const game = gameRef.current;
     try {
@@ -546,7 +618,6 @@ export default function PracticeMode({ opening, onExit }) {
         setFen(game.fen());
         showFeedback("wrong");
         setSessionWrong(w => w + 1);
-        // Wrong: boost this variation's weight but don't end the round — let them try again
         setWeights(w => updateWeight(w, variationIndex, false));
         return false;
       }
@@ -563,7 +634,6 @@ export default function PracticeMode({ opening, onExit }) {
     }
   }
 
-  // Weights normalised for display
   const totalWeight = weights.reduce((s, w) => s + w, 0);
   const variationSub = currentVariation.variation || "";
   const dropInMoveNum = Math.floor(dropInAt / 2) + 1;
@@ -588,7 +658,6 @@ export default function PracticeMode({ opening, onExit }) {
 
           <aside className="practice-sidebar">
 
-            {/* Current variation */}
             <div>
               <div className="sidebar-section-label">Current variation</div>
               <div className="variation-title">
@@ -599,7 +668,6 @@ export default function PracticeMode({ opening, onExit }) {
               )}
             </div>
 
-            {/* Drop-in point */}
             <div className="dropin-block">
               <div className="dropin-label">Starting from</div>
               <div className="dropin-value">
@@ -607,7 +675,6 @@ export default function PracticeMode({ opening, onExit }) {
               </div>
             </div>
 
-            {/* Session score */}
             <div>
               <div className="sidebar-section-label">Session</div>
               <div className="score-block">
@@ -622,12 +689,10 @@ export default function PracticeMode({ opening, onExit }) {
               </div>
             </div>
 
-            {/* Feedback */}
             <div className={`feedback-flash ${feedback ? `visible ${feedback}` : ""}`}>
               {feedback === "correct" ? "✓ Correct" : feedback === "wrong" ? "✗ Wrong move — try again" : "‎"}
             </div>
 
-            {/* Variation weights */}
             <div>
               <div className="sidebar-section-label">Variation weights</div>
               <div className="weight-list">
@@ -666,6 +731,8 @@ export default function PracticeMode({ opening, onExit }) {
                     position: fen,
                     boardOrientation: openingColor,
                     onPieceDrop,
+                    onSquareClick,
+                    squareStyles: optionSquares,
                   }}
                 />
               </div>
@@ -674,7 +741,6 @@ export default function PracticeMode({ opening, onExit }) {
 
         </div>
 
-        {/* Session summary overlay */}
         {showSummary && (
           <div className="overlay">
             <div className="overlay-card">

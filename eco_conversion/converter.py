@@ -31,7 +31,7 @@ TSV_URLS = [
     "https://raw.githubusercontent.com/lichess-org/chess-openings/master/e.tsv",
 ]
 
-MIN_VARIATIONS = 10  # min variations to include a family at all
+MIN_VARIATIONS = 5  # min variations to include a family at all
 MAX_VARIATIONS = 30  # cap per opening family
 MIN_MOVES = 4  # skip ultra-short lines (less interesting for teaching)
 OUTPUT_FILE = "openings.json"
